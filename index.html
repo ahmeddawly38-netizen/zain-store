@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZAIN STORE | زين ستور</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#111;color:#fff;font-family:Arial,sans-serif}
+header{background:#080808;padding:22px;text-align:center;border-bottom:2px solid #c9a34b}
+.logo{font-size:30px;color:#d6b45b;font-weight:bold}
+header p{color:#aaa;margin-bottom:0}
+nav{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;padding:15px}
+nav button{background:#222;color:#d6b45b;border:1px solid #b89543;padding:10px 15px;border-radius:20px}
+h2{text-align:center;color:#d6b45b}
+.products{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:15px;padding:15px}
+.product{background:#202020;border:1px solid #514326;border-radius:12px;padding:12px;text-align:center}
+.product img{width:100%;height:160px;object-fit:cover;border-radius:8px}
+.price{color:#e5c36b;font-weight:bold}
+.product button,.checkout{background:#c9a34b;color:#111;border:0;padding:11px;border-radius:7px;font-weight:bold;cursor:pointer}
+.cart{margin:15px;padding:18px;background:#202020;border-radius:12px}
+footer{text-align:center;padding:25px;color:#aaa}
+</style>
+</head>
+<body>
+<header>
+<div class="logo">ZAIN STORE</div>
+<p>أناقتك تبدأ من هنا ✨</p>
+</header>
+
+<nav id="categories">
+<button onclick="loadProducts()">كل المنتجات</button>
+</nav>
+
+<h2>منتجاتنا</h2>
+<div class="products" id="products">
+<p style="text-align:center">جاري تحميل المنتجات...</p>
+</div>
+
+<div class="cart">
+<h2>🛒 سلة المشتريات</h2>
+<div id="cartItems">السلة فارغة</div>
+<h3 id="total">الإجمالي: 0 جنيه</h3>
+<button class="checkout" onclick="checkout()">إتمام الطلب عبر واتساب</button>
+</div>
+
+<footer>© ZAIN STORE - جميع الحقوق محفوظة</footer>
+
+<script>
+const PHONE="201013740837";
+let products=[];
+let cart=[];
+
+function loadProducts(){
+document.getElementById("products").innerHTML=
+'<p>المتجر جاهز لاستقبال المنتجات من قاعدة البيانات.</p>';
+}
+
+function addToCart(id){
+const p=products.find(x=>x.id===id);
+if(!p)return;
+cart.push(p);
+renderCart();
+}
+
+function renderCart(){
+let box=document.getElementById("cartItems");
+if(!cart.length){box.innerHTML="السلة فارغة";document.getElementById("total").innerText="الإجمالي: 0 جنيه";return}
+box.innerHTML=cart.map((p,i)=>`
+<div>${p.name} - ${p.price} جنيه
+<button onclick="removeItem(${i})">حذف</button></div>`).join("");
+document.getElementById("total").innerText="الإجمالي: "+cart.reduce((s,p)=>s+Number(p.price),0)+" جنيه";
+}
+
+function removeItem(i){cart.splice(i,1);renderCart()}
+
+function checkout(){
+if(!cart.length){alert("السلة فارغة");return}
+let total=cart.reduce((s,p)=>s+Number(p.price),0);
+let msg="طلب جديد من ZAIN STORE:%0A"+
+cart.map(p=>p.name+" - "+p.price+" جنيه").join("%0A")+
+"%0Aالإجمالي: "+total+" جنيه";
+window.open("https://wa.me/"+PHONE+"?text="+msg,"_blank");
+}
+loadProducts();
+</script>
+</body>
+</html>
