@@ -1,88 +1,215 @@
+
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ZAIN STORE | زين ستور</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#111;color:#fff;font-family:Arial,sans-serif}
-header{background:#080808;padding:22px;text-align:center;border-bottom:2px solid #c9a34b}
+header{text-align:center;padding:25px;background:#080808;border-bottom:2px solid #c9a34b}
 .logo{font-size:30px;color:#d6b45b;font-weight:bold}
-header p{color:#aaa;margin-bottom:0}
-nav{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;padding:15px}
-nav button{background:#222;color:#d6b45b;border:1px solid #b89543;padding:10px 15px;border-radius:20px}
-h2{text-align:center;color:#d6b45b}
-.products{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:15px;padding:15px}
+header p{color:#aaa}
+h2{color:#d6b45b;text-align:center}
+nav{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:15px}
+nav button{background:#222;color:#d6b45b;border:1px solid #b89543;padding:10px 14px;border-radius:20px}
+.products{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px;padding:15px}
 .product{background:#202020;border:1px solid #514326;border-radius:12px;padding:12px;text-align:center}
-.product img{width:100%;height:160px;object-fit:cover;border-radius:8px}
+.product img{width:100%;height:165px;object-fit:cover;border-radius:8px;background:#333}
 .price{color:#e5c36b;font-weight:bold}
-.product button,.checkout{background:#c9a34b;color:#111;border:0;padding:11px;border-radius:7px;font-weight:bold;cursor:pointer}
+button{cursor:pointer}
+.add,.checkout{background:#c9a34b;color:#111;border:0;padding:11px;border-radius:7px;font-weight:bold}
+.add{width:100%}
 .cart{margin:15px;padding:18px;background:#202020;border-radius:12px}
+.cart-line{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #444}
+.remove{background:#633;color:white;border:0;border-radius:5px;padding:5px}
+.checkout{width:100%;font-size:16px}
 footer{text-align:center;padding:25px;color:#aaa}
+#message{text-align:center;color:#d6b45b;padding:15px}
 </style>
 </head>
 <body>
 <header>
-<div class="logo">ZAIN STORE</div>
-<p>أناقتك تبدأ من هنا ✨</p>
+ <div class="logo">ZAIN STORE</div>
+ <p>أناقتك تبدأ من هنا ✨</p>
 </header>
 
 <nav id="categories">
-<button onclick="loadProducts()">كل المنتجات</button>
+ <button data-category="all">كل المنتجات</button>
 </nav>
 
 <h2>منتجاتنا</h2>
-<div class="products" id="products">
-<p style="text-align:center">جاري تحميل المنتجات...</p>
-</div>
+<div id="message">جاري تحميل المنتجات...</div>
+<div class="products" id="products"></div>
 
 <div class="cart">
-<h2>🛒 سلة المشتريات</h2>
-<div id="cartItems">السلة فارغة</div>
-<h3 id="total">الإجمالي: 0 جنيه</h3>
-<button class="checkout" onclick="checkout()">إتمام الطلب عبر واتساب</button>
+ <h2>🛒 سلة المشتريات</h2>
+ <div id="cartItems">السلة فارغة</div>
+ <h3 id="total">الإجمالي: 0 جنيه</h3>
+ <button class="checkout" onclick="checkout()">إتمام الطلب عبر واتساب</button>
 </div>
 
 <footer>© ZAIN STORE - جميع الحقوق محفوظة</footer>
 
 <script>
-const PHONE="201013740837";
+const SUPABASE_URL="https://keemqicaosqmpuwiyozx.supabase.co";
+const SUPABASE_KEY="sb_publishable_RwzbqsTjw6iQjzc58T3ccg_5d3LnAW_";
+const WHATSAPP="201013740837";
+
+const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 let products=[];
 let cart=[];
+let selectedCategory="all";
 
-function loadProducts(){
-document.getElementById("products").innerHTML=
-'<p>المتجر جاهز لاستقبال المنتجات من قاعدة البيانات.</p>';
+function safe(value){
+ return String(value??"").replace(/[&<>"']/g,c=>({
+ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+ }[c]));
+}
+
+async function loadStore(){
+ try{
+  const [catResult,productResult]=await Promise.all([
+   db.from("categories").select("id,name").eq("is_active",true).order("sort_order"),
+   db.from("products").select("id,name,description,price,image_url,stock_quantity,category_id").eq("is_active",true).order("created_at",{ascending:false})
+  ]);
+
+  if(catResult.error) throw catResult.error;
+  if(productResult.error) throw productResult.error;
+
+  products=productResult.data||[];
+  const nav=document.getElementById("categories");
+  nav.innerHTML='<button data-category="all">كل المنتجات</button>';
+  (catResult.data||[]).forEach(c=>{
+   const b=document.createElement("button");
+   b.textContent=c.name;
+   b.dataset.category=c.id;
+   nav.appendChild(b);
+  });
+  nav.querySelectorAll("button").forEach(b=>{
+   b.addEventListener("click",()=>{
+    selectedCategory=b.dataset.category;
+    renderProducts();
+   });
+  });
+  renderProducts();
+ }catch(error){
+  document.getElementById("message").textContent=
+   "تعذر تحميل المنتجات. تأكد من الاتصال بقاعدة البيانات.";
+  console.error(error);
+ }
+}
+
+function renderProducts(){
+ const list=selectedCategory==="all"
+  ?products:products.filter(p=>p.category_id===selectedCategory);
+ const box=document.getElementById("products");
+ document.getElementById("message").textContent=
+  list.length?"":"لا توجد منتجات في هذا القسم حاليًا";
+ box.innerHTML=list.map(p=>`
+  <div class="product">
+   <img src="${safe(p.image_url||"")}" alt="${safe(p.name)}"
+    onerror="this.style.display='none'">
+   <h3>${safe(p.name)}</h3>
+   <p>${safe(p.description||"")}</p>
+   <p class="price">${Number(p.price).toLocaleString("ar-EG")} جنيه</p>
+   <button class="add" data-add="${safe(p.id)}"
+    ${Number(p.stock_quantity)<=0?"disabled":""}>
+    ${Number(p.stock_quantity)<=0?"غير متوفر":"أضف للسلة"}
+   </button>
+  </div>`).join("");
+
+ box.querySelectorAll("[data-add]").forEach(b=>{
+  b.addEventListener("click",()=>addToCart(b.dataset.add));
+ });
 }
 
 function addToCart(id){
-const p=products.find(x=>x.id===id);
-if(!p)return;
-cart.push(p);
-renderCart();
+ const p=products.find(x=>x.id===id);
+ if(!p)return;
+ const line=cart.find(x=>x.id===id);
+ if(line){
+  if(line.quantity>=Number(p.stock_quantity)){
+   alert("الكمية المتاحة غير كافية");return;
+  }
+  line.quantity++;
+ }else{
+  if(Number(p.stock_quantity)<=0){alert("المنتج غير متوفر");return;}
+  cart.push({id:p.id,name:p.name,price:Number(p.price),quantity:1});
+ }
+ renderCart();
 }
 
 function renderCart(){
-let box=document.getElementById("cartItems");
-if(!cart.length){box.innerHTML="السلة فارغة";document.getElementById("total").innerText="الإجمالي: 0 جنيه";return}
-box.innerHTML=cart.map((p,i)=>`
-<div>${p.name} - ${p.price} جنيه
-<button onclick="removeItem(${i})">حذف</button></div>`).join("");
-document.getElementById("total").innerText="الإجمالي: "+cart.reduce((s,p)=>s+Number(p.price),0)+" جنيه";
+ const box=document.getElementById("cartItems");
+ if(!cart.length){
+  box.textContent="السلة فارغة";
+ }else{
+  box.innerHTML=cart.map((p,i)=>`
+   <div class="cart-line">
+    <span>${safe(p.name)} × ${p.quantity}</span>
+    <span>${(p.price*p.quantity).toLocaleString("ar-EG")} جنيه
+    <button class="remove" data-remove="${i}">حذف</button></span>
+   </div>`).join("");
+ }
+ box.querySelectorAll("[data-remove]").forEach(b=>{
+  b.addEventListener("click",()=>{
+   cart.splice(Number(b.dataset.remove),1);
+   renderCart();
+  });
+ });
+ const total=cart.reduce((s,p)=>s+p.price*p.quantity,0);
+ document.getElementById("total").textContent=
+  "الإجمالي: "+total.toLocaleString("ar-EG")+" جنيه";
 }
 
-function removeItem(i){cart.splice(i,1);renderCart()}
+async function checkout(){
+ if(!cart.length){alert("السلة فارغة");return;}
 
-function checkout(){
-if(!cart.length){alert("السلة فارغة");return}
-let total=cart.reduce((s,p)=>s+Number(p.price),0);
-let msg="طلب جديد من ZAIN STORE:%0A"+
-cart.map(p=>p.name+" - "+p.price+" جنيه").join("%0A")+
-"%0Aالإجمالي: "+total+" جنيه";
-window.open("https://wa.me/"+PHONE+"?text="+msg,"_blank");
+ const name=prompt("اكتب اسمك:");
+ if(!name||!name.trim())return;
+ const phone=prompt("اكتب رقم هاتفك:");
+ if(!phone||!phone.trim())return;
+ const address=prompt("اكتب عنوان التوصيل:");
+ if(!address||!address.trim())return;
+
+ const subtotal=cart.reduce((s,p)=>s+p.price*p.quantity,0);
+ const orderItems=cart.map(p=>({
+  product_id:p.id,name:p.name,price:p.price,quantity:p.quantity
+ }));
+
+ const {error}=await db.from("orders").insert([{
+  customer_name:name.trim(),
+  customer_phone:phone.trim(),
+  customer_address:address.trim(),
+  items:orderItems,
+  subtotal:subtotal,
+  delivery_fee:0,
+  total:subtotal,
+  status:"pending"
+ }]);
+
+ if(error){
+  console.error(error);
+  alert("لم يتم تسجيل الطلب في قاعدة البيانات. حاول مرة أخرى.");
+  return;
+ }
+
+ const message=
+  "طلب جديد من ZAIN STORE%0A"+
+  "الاسم: "+encodeURIComponent(name.trim())+"%0A"+
+  "الهاتف: "+encodeURIComponent(phone.trim())+"%0A"+
+  "العنوان: "+encodeURIComponent(address.trim())+"%0A"+
+  orderItems.map(p=>encodeURIComponent(p.name)+" × "+p.quantity+
+  " - "+p.price*p.quantity+" جنيه").join("%0A")+
+  "%0Aالإجمالي: "+subtotal+" جنيه";
+
+ window.location.href="https://wa.me/"+WHATSAPP+"?text="+message;
 }
-loadProducts();
+
+loadStore();
 </script>
 </body>
 </html>
