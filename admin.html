@@ -134,9 +134,31 @@ function showProducts(){
  document.getElementById("ordersSection").classList.add("hidden");
 }
 
+let ordersRealtimeChannel = null;
+
+function startOrdersRealtime(){
+ if(ordersRealtimeChannel) return;
+
+ ordersRealtimeChannel = db
+  .channel("admin-orders-live")
+  .on(
+   "postgres_changes",
+   {
+    event:"INSERT",
+    schema:"public",
+    table:"orders"
+   },
+   (payload)=>{
+    loadOrders();
+   }
+  )
+  .subscribe();
+}
+
 function showOrders(){
  document.getElementById("productsSection").classList.add("hidden");
  document.getElementById("ordersSection").classList.remove("hidden");
+ startOrdersRealtime();
  loadOrders();
 }
 
