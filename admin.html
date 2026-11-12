@@ -284,52 +284,136 @@ async function loadOrders(){
  const {data,error}=await db.from("orders")
  .select("*").order("created_at",{ascending:false});
 
- if(error){box.textContent="خطأ: "+error.message;return;}
- if(!data.length){box.textContent="لا توجد طلبات حتى الآن";return;}
+ if(error){
+  box.textContent="حدث خطأ أثناء تحميل الطلبات: "+error.message;
+  return;
+ }
+ if(!data || !data.length){
+  box.textContent="لا توجد طلبات حتى الآن";
+  return;
+ }
+
+ const statusNames={
+  pending:"قيد المراجعة",
+  confirmed:"تم التأكيد",
+  preparing:"جاري التجهيز",
+  shipped:"خرج للتوصيل",
+  delivered:"تم التسليم",
+  cancelled:"ملغي"
+ };
 
  box.innerHTML="";
+
  data.forEach(o=>{
-  const div=document.createElement("div");
-  div.className="order";
+  const card=document.createElement("div");
+  card.className="order";
+  card.style.cssText="border:1px solid #555;border-radius:10px;padding:14px;margin:12px 0;background:#252525";
 
-  const heading=document.createElement("strong");
-  heading.textContent="طلب رقم: "+o.id;
+  const heading=document.createElement("h3");
+  heading.style.color="#d6ad55";
+  heading.textContent="طلب رقم: "+String(o.id).slice(0,8);
+  card.appendChild(heading);
 
-  const details=document.createElement("p");
-  details.textContent=
-   "العميل: "+o.customer_name+
-   " | الهاتف: "+o.customer_phone+
-   " | العنوان: "+o.customer_address+
-   " | الإجمالي: "+o.total+" جنيه"+
-   " | الحالة: "+o.status;
+  const date=document.createElement("p");
+  date.textContent="تاريخ الطلب: "+(o.created_at?new Date(o.created_at).toLocaleString("ar-EG"):"غير متاح");
+  card.appendChild(date);
 
-  const items=document.createElement("pre");
-  items.style.whiteSpace="pre-wrap";
-  items.textContent=JSON.stringify(o.items,null,2);
+  const customer=document.createElement("p");
+  customer.textContent="اسم العميل: "+(o.customer_name||"غير متاح");
+  card.appendChild(customer);
 
-  const status=document.createElement("select");
-  ["pending","confirmed","preparing","shipped","delivered","cancelled"].forEach(s=>{
-   const op=document.createElement("option");
-   op.value=s;
-   op.textContent=s;
-   if(s===o.status)op.selected=true;
-   status.appendChild(op);
+  const phone=document.createElement("p");
+  phone.textContent="رقم الهاتف: "+(o.customer_phone||"غير متاح");
+  card.appendChild(phone);
+
+  const address=document.createElement("p");
+  address.textContent="عنوان التوصيل: "+(o.customer_address||"غير متاح");
+  card.appendChild(address);
+
+  if(o.notes){
+   const notes=document.createElement("p");
+   notes.textContent="ملاحظات العميل: "+o.notes;
+   card.appendChild(notes);
+  }
+
+  const productsTitle=document.createElement("h4");
+  productsTitle.textContent="تفاصيل المنتجات";
+  card.appendChild(productsTitle);
+
+  const list=document.createElement("div");
+
+  (Array.isArray(o.items)?o.items:[]).forEach(item=>{
+   const row=document.createElement("p");
+   const qty=Number(item.quantity||0);
+   const price=Number(item.price||0);
+   row.textContent=(item.name||"منتج")+" × "+qty+" — "+(price*qty).toLocaleString("ar-EG")+" جنيه";
+   list.appendChild(row);
   });
 
+  if(!list.children.length){
+   list.textContent="لا توجد تفاصيل منتجات";
+  }
+  card.appendChild(list);
+
+  const totals=document.createElement("div");
+  totals.style.cssText="border-top:1px solid #555;margin-top:10px;padding-top:10px";
+
+  const subtotal=document.createElement("p");
+  subtotal.textContent="المجموع الفرعي: "+Number(o.subtotal||0).toLocaleString("ar-EG")+" جنيه";
+
+  const delivery=document.createElement("p");
+  delivery.textContent="رسوم التوصيل: "+Number(o.delivery_fee||0).toLocaleString("ar-EG")+" جنيه";
+
+  const total=document.createElement("h3");
+  total.style.color="#d6ad55";
+  total.textContent="الإجمالي: "+Number(o.total||0).toLocaleString("ar-EG")+" جنيه";
+
+  totals.append(subtotal,delivery,total);
+  card.appendChild(totals);
+
+  const statusLabel=document.createElement("label");
+  statusLabel.textContent="حالة الطلب: ";
+
+  const status=document.createElement("select");
+  status.style.width="100%";
+
+  ["pending","confirmed","preparing","shipped","delivered","cancelled"].forEach(s=>{
+   const option=document.createElement("option");
+   option.value=s;
+   option.textContent=statusNames[s];
+   if(s===o.status)option.selected=true;
+   status.appendChild(option);
+  });
+
+  statusLabel.appendChild(status);
+  card.appendChild(statusLabel);
+
   const save=document.createElement("button");
-  save.textContent="تحديث الحالة";
+  save.textContent="حفظ حالة الطلب";
+
   save.onclick=async()=>{
+   save.disabled=true;
+   save.textContent="جاري الحفظ...";
+
    const {error}=await db.from("orders")
     .update({status:status.value}).eq("id",o.id);
-   if(error){alert(error.message);return;}
-   alert("تم تحديث الطلب");
+
+   if(error){
+    alert("تعذر تحديث الحالة: "+error.message);
+    save.disabled=false;
+    save.textContent="حفظ حالة الطلب";
+    return;
+   }
+
+   alert("تم تحديث حالة الطلب بنجاح");
    loadOrders();
   };
 
-  div.append(heading,details,items,status,save);
-  box.appendChild(div);
+  card.appendChild(save);
+  box.appendChild(card);
  });
 }
+
 </script>
 </body>
 </html>
