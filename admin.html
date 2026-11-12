@@ -310,7 +310,9 @@ async function loadOrders(){
   card.style.cssText="border:1px solid #555;border-radius:10px;padding:14px;margin:12px 0;background:#252525";
 
   const heading=document.createElement("div");
-heading.textContent="رقم الطلب: #"+String(o.id).slice(0,8);
+heading.textContent=o.order_number
+ ? "رقم الطلب: ZS-"+String(o.order_number).padStart(4,"0")
+ : "رقم الطلب: #"+String(o.id).slice(0,8).toUpperCase();
 heading.style.cssText="color:#d6ad55;font-size:15px;font-weight:bold;background:#333;padding:10px 14px;border-radius:8px;margin-bottom:12px;display:inline-block";
   card.appendChild(heading);
 
