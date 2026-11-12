@@ -288,6 +288,13 @@ async function loadOrders(){
   box.textContent="حدث خطأ أثناء تحميل الطلبات: "+error.message;
   return;
  }
+ const countElement=document.getElementById("newOrdersCount");
+const newCount=(data||[]).filter(o=>o.status==="pending").length;
+
+if(countElement){
+ countElement.textContent=newCount;
+ countElement.style.display=newCount>0?"inline-block":"none";
+}
  if(!data || !data.length){
   box.textContent="لا توجد طلبات حتى الآن";
   return;
