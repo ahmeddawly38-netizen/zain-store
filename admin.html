@@ -410,6 +410,21 @@ async function loadOrders(){
   };
 
   card.appendChild(save);
+  const whatsapp=document.createElement("button");
+whatsapp.textContent="مراسلة العميل عبر واتساب";
+whatsapp.style.cssText="background:#25D366;color:white;width:100%;margin-top:10px;padding:12px;border:0;border-radius:8px;cursor:pointer";
+
+whatsapp.onclick=()=>{
+ const phone=String(o.customer_phone||"").replace(/\D/g,"");
+ if(!phone){
+  alert("رقم العميل غير متاح");
+  return;
+ }
+ const message=encodeURIComponent("أهلاً "+(o.customer_name||"بحضرتك")+"، بخصوص طلبك رقم "+String(o.id).slice(0,8)+" من ZAIN STORE.");
+ window.open("https://wa.me/"+(phone.startsWith("0")?"20"+phone.slice(1):phone)+"?text="+message,"_blank");
+};
+
+card.appendChild(whatsapp);
   box.appendChild(card);
  });
 }
