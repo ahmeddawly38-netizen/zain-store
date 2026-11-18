@@ -15,6 +15,7 @@ input,select,textarea{width:100%;padding:12px;margin:7px 0 14px;border:1px solid
 button{background:#c49a43;color:#111;border:0;padding:12px 18px;border-radius:7px;font-weight:bold;font-size:15px;cursor:pointer;margin:4px}
 button.red{background:#a93232;color:white}
 button.gray{background:#555;color:white}
+button.invoice{background:#e8e8e8;color:#111}
 .hidden{display:none}
 .product,.order{border-bottom:1px solid #444;padding:12px 0}
 small{color:#bbb}
@@ -299,6 +300,33 @@ async function deleteProduct(id){
  loadProducts();
 }
 
+function escapeInvoiceText(value){
+ return String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;", "'":"&#39;"}[ch]));
+}
+
+function printInvoice(o){
+ const orderNo=o.order_number
+  ? "ZS-"+String(o.order_number).padStart(4,"0")
+  : "#"+String(o.id||"").slice(0,8).toUpperCase();
+ const date=o.created_at?new Date(o.created_at).toLocaleString("ar-EG"):"غير متاح";
+ const statusNames={pending:"قيد المراجعة",confirmed:"تم التأكيد",preparing:"جاري التجهيز",shipped:"خرج للتوصيل",delivered:"تم التسليم",cancelled:"ملغي"};
+ const items=Array.isArray(o.items)?o.items:[];
+ const rows=items.map(item=>{
+  const qty=Number(item.quantity||0);
+  const price=Number(item.price||0);
+  return `<tr><td>${escapeInvoiceText(item.name||"منتج")}</td><td>${qty.toLocaleString("ar-EG")}</td><td>${price.toLocaleString("ar-EG")} ج.م</td><td>${(qty*price).toLocaleString("ar-EG")} ج.م</td></tr>`;
+ }).join("");
+
+ const invoiceWindow=window.open("","_blank","width=850,height=700");
+ if(!invoiceWindow){alert("السماح بالنوافذ المنبثقة مطلوب لفتح الفاتورة");return;}
+
+ invoiceWindow.document.open();
+ invoiceWindow.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>فاتورة ${escapeInvoiceText(orderNo)} - ZAIN STORE</title><style>
+ *{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#222;margin:0;padding:28px;background:#f4f4f4}.invoice{max-width:780px;margin:auto;background:#fff;padding:32px;border:1px solid #ddd}.top{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;border-bottom:3px solid #c49a43;padding-bottom:18px}.brand{font-size:27px;font-weight:bold;color:#9a742d}.muted{color:#666;font-size:13px;line-height:1.8}.title{font-size:24px;margin:22px 0;color:#222}.details{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px;margin-bottom:20px}.details div{padding:7px 0;border-bottom:1px solid #eee}table{width:100%;border-collapse:collapse;margin:18px 0}th,td{padding:12px 9px;border:1px solid #ddd;text-align:right;font-size:14px}th{background:#f4ead5}.totals{width: min(100%,360px);margin-right:auto}.totals div{display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #eee}.grand{font-size:20px;font-weight:bold;color:#8b6825}.footer{text-align:center;margin-top:35px;padding-top:15px;border-top:1px solid #ddd;color:#777;font-size:13px}.actions{text-align:center;margin:20px auto}.actions button{background:#c49a43;border:0;padding:12px 22px;border-radius:6px;font-weight:bold;cursor:pointer}.notes{margin-top:18px;white-space:pre-wrap}@media print{body{background:#fff;padding:0}.invoice{border:0;padding:10px;max-width:none}.actions{display:none}@page{size:A4;margin:12mm}}@media(max-width:560px){body{padding:8px}.invoice{padding:16px}.top{display:block}.details{grid-template-columns:1fr}th,td{font-size:12px;padding:8px 5px}}
+ </style></head><body><main class="invoice"><div class="top"><div><div class="brand">ZAIN STORE</div><div class="muted">فاتورة طلب إلكترونية</div></div><div><strong>رقم الفاتورة: ${escapeInvoiceText(orderNo)}</strong><div class="muted">تاريخ الطلب: ${escapeInvoiceText(date)}</div></div></div><h1 class="title">فاتورة العميل</h1><section class="details"><div><strong>اسم العميل:</strong> ${escapeInvoiceText(o.customer_name||"غير متاح")}</div><div><strong>رقم الهاتف:</strong> ${escapeInvoiceText(o.customer_phone||"غير متاح")}</div><div><strong>عنوان التوصيل:</strong> ${escapeInvoiceText(o.customer_address||"غير متاح")}</div><div><strong>حالة الطلب:</strong> ${escapeInvoiceText(statusNames[o.status]||o.status||"غير محدد")}</div></section><h3>تفاصيل المنتجات</h3><table><thead><tr><th>المنتج</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead><tbody>${rows||'<tr><td colspan="4">لا توجد تفاصيل منتجات</td></tr>'}</tbody></table><section class="totals"><div><span>المجموع الفرعي</span><strong>${Number(o.subtotal||0).toLocaleString("ar-EG")} ج.م</strong></div><div><span>رسوم التوصيل</span><strong>${Number(o.delivery_fee||0).toLocaleString("ar-EG")} ج.م</strong></div><div class="grand"><span>الإجمالي النهائي</span><strong>${Number(o.total||0).toLocaleString("ar-EG")} ج.م</strong></div></section>${o.notes?`<div class="notes"><strong>ملاحظات العميل:</strong> ${escapeInvoiceText(o.notes)}</div>`:""}<div class="footer">شكرًا لثقتكم في ZAIN STORE</div></main><div class="actions"><button onclick="window.print()">طباعة الفاتورة / حفظ PDF</button></div></body></html>`);
+ invoiceWindow.document.close();
+}
+
 async function loadOrders(){
  const box=document.getElementById("ordersList");
  box.textContent="جاري تحميل الطلبات...";
@@ -311,12 +339,12 @@ async function loadOrders(){
   return;
  }
  const countElement=document.getElementById("newOrdersCount");
-const newCount=(data||[]).filter(o=>o.status==="pending").length;
+ const newCount=(data||[]).filter(o=>o.status==="pending").length;
 
-if(countElement){
- countElement.textContent=newCount;
- countElement.style.display=newCount>0?"inline-block":"none";
-}
+ if(countElement){
+  countElement.textContent=newCount;
+  countElement.style.display=newCount>0?"inline-block":"none";
+ }
  if(!data || !data.length){
   box.textContent="لا توجد طلبات حتى الآن";
   return;
@@ -339,10 +367,10 @@ if(countElement){
   card.style.cssText="border:1px solid #555;border-radius:10px;padding:14px;margin:12px 0;background:#252525";
 
   const heading=document.createElement("div");
-heading.textContent=o.order_number
- ? "رقم الطلب: ZS-"+String(o.order_number).padStart(4,"0")
- : "رقم الطلب: #"+String(o.id).slice(0,8).toUpperCase();
-heading.style.cssText="color:#d6ad55;font-size:15px;font-weight:bold;background:#333;padding:10px 14px;border-radius:8px;margin-bottom:12px;display:inline-block";
+  heading.textContent=o.order_number
+   ? "رقم الطلب: ZS-"+String(o.order_number).padStart(4,"0")
+   : "رقم الطلب: #"+String(o.id).slice(0,8).toUpperCase();
+  heading.style.cssText="color:#d6ad55;font-size:15px;font-weight:bold;background:#333;padding:10px 14px;border-radius:8px;margin-bottom:12px;display:inline-block";
   card.appendChild(heading);
 
   const date=document.createElement("p");
@@ -372,7 +400,6 @@ heading.style.cssText="color:#d6ad55;font-size:15px;font-weight:bold;background:
   card.appendChild(productsTitle);
 
   const list=document.createElement("div");
-
   (Array.isArray(o.items)?o.items:[]).forEach(item=>{
    const row=document.createElement("p");
    const qty=Number(item.quantity||0);
@@ -380,34 +407,32 @@ heading.style.cssText="color:#d6ad55;font-size:15px;font-weight:bold;background:
    row.textContent=(item.name||"منتج")+" × "+qty+" — "+(price*qty).toLocaleString("ar-EG")+" جنيه";
    list.appendChild(row);
   });
-
-  if(!list.children.length){
-   list.textContent="لا توجد تفاصيل منتجات";
-  }
+  if(!list.children.length){list.textContent="لا توجد تفاصيل منتجات";}
   card.appendChild(list);
 
   const totals=document.createElement("div");
   totals.style.cssText="border-top:1px solid #555;margin-top:10px;padding-top:10px";
-
   const subtotal=document.createElement("p");
   subtotal.textContent="المجموع الفرعي: "+Number(o.subtotal||0).toLocaleString("ar-EG")+" جنيه";
-
   const delivery=document.createElement("p");
   delivery.textContent="رسوم التوصيل: "+Number(o.delivery_fee||0).toLocaleString("ar-EG")+" جنيه";
-
   const total=document.createElement("h3");
   total.style.color="#d6ad55";
   total.textContent="الإجمالي: "+Number(o.total||0).toLocaleString("ar-EG")+" جنيه";
-
   totals.append(subtotal,delivery,total);
   card.appendChild(totals);
 
+  const invoiceButton=document.createElement("button");
+  invoiceButton.className="invoice";
+  invoiceButton.textContent="عرض الفاتورة / طباعة PDF";
+  invoiceButton.style.cssText="width:100%;margin-top:10px";
+  invoiceButton.onclick=()=>printInvoice(o);
+  card.appendChild(invoiceButton);
+
   const statusLabel=document.createElement("label");
   statusLabel.textContent="حالة الطلب: ";
-
   const status=document.createElement("select");
   status.style.width="100%";
-
   ["pending","confirmed","preparing","shipped","delivered","cancelled"].forEach(s=>{
    const option=document.createElement("option");
    option.value=s;
@@ -415,51 +440,39 @@ heading.style.cssText="color:#d6ad55;font-size:15px;font-weight:bold;background:
    if(s===o.status)option.selected=true;
    status.appendChild(option);
   });
-
   statusLabel.appendChild(status);
   card.appendChild(statusLabel);
 
   const save=document.createElement("button");
   save.textContent="حفظ حالة الطلب";
-
   save.onclick=async()=>{
    save.disabled=true;
    save.textContent="جاري الحفظ...";
-
-   const {error}=await db.from("orders")
-    .update({status:status.value}).eq("id",o.id);
-
+   const {error}=await db.from("orders").update({status:status.value}).eq("id",o.id);
    if(error){
     alert("تعذر تحديث الحالة: "+error.message);
     save.disabled=false;
     save.textContent="حفظ حالة الطلب";
     return;
    }
-
    alert("تم تحديث حالة الطلب بنجاح");
    loadOrders();
   };
-
   card.appendChild(save);
+
   const whatsapp=document.createElement("button");
-whatsapp.textContent="مراسلة العميل عبر واتساب";
-whatsapp.style.cssText="background:#25D366;color:white;width:100%;margin-top:10px;padding:12px;border:0;border-radius:8px;cursor:pointer";
-
-whatsapp.onclick=()=>{
- const phone=String(o.customer_phone||"").replace(/\D/g,"");
- if(!phone){
-  alert("رقم العميل غير متاح");
-  return;
- }
- const message=encodeURIComponent("أهلاً "+(o.customer_name||"بحضرتك")+"، بخصوص طلبك رقم "+String(o.id).slice(0,8)+" من ZAIN STORE.");
- window.open("https://wa.me/"+(phone.startsWith("0")?"20"+phone.slice(1):phone)+"?text="+message,"_blank");
-};
-
-card.appendChild(whatsapp);
+  whatsapp.textContent="مراسلة العميل عبر واتساب";
+  whatsapp.style.cssText="background:#25D366;color:white;width:100%;margin-top:10px;padding:12px;border:0;border-radius:8px;cursor:pointer";
+  whatsapp.onclick=()=>{
+   const phone=String(o.customer_phone||"").replace(/\D/g,"");
+   if(!phone){alert("رقم العميل غير متاح");return;}
+   const message=encodeURIComponent("أهلاً "+(o.customer_name||"بحضرتك")+"، بخصوص طلبك رقم "+String(o.id).slice(0,8)+" من ZAIN STORE.");
+   window.open("https://wa.me/"+(phone.startsWith("0")?"20"+phone.slice(1):phone)+"?text="+message,"_blank");
+  };
+  card.appendChild(whatsapp);
   box.appendChild(card);
  });
 }
-
 </script>
 </body>
 </html>
