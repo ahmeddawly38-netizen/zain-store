@@ -6,7 +6,97 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ZAIN STORE | زين ستور</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<style>
+
+.checkout-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0,0,0,.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 15px;
+  overflow-y: auto;
+}
+
+.checkout-box {
+  background: #171717;
+  border: 1px solid #c9a34a;
+  border-radius: 18px;
+  padding: 25px 20px;
+  width: 100%;
+  max-width: 420px;
+  color: #fff;
+  position: relative;
+  box-shadow: 0 10px 40px rgba(0,0,0,.5);
+}
+
+.checkout-box h2 {
+  color: #d6b45c;
+  text-align: center;
+  margin: 5px 0 8px;
+}
+
+.checkout-box p {
+  color: #aaa;
+  text-align: center;
+  margin-bottom: 22px;
+}
+
+.checkout-close {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  background: none;
+  border: none;
+  color: #d6b45c;
+  font-size: 30px;
+  cursor: pointer;
+}
+
+.checkout-box label {
+  display: block;
+  color: #d6b45c;
+  margin: 14px 0 7px;
+}
+
+.checkout-box input,
+.checkout-box textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 13px;
+  border: 1px solid #444;
+  border-radius: 9px;
+  background: #242424;
+  color: #fff;
+  font-size: 15px;
+  outline: none;
+  font-family: inherit;
+}
+
+.checkout-box input:focus,
+.checkout-box textarea:focus {
+  border-color: #d6b45c;
+}
+
+.checkout-box textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.checkout-submit {
+  width: 100%;
+  margin-top: 22px;
+  padding: 14px;
+  border: none;
+  border-radius: 9px;
+  background: linear-gradient(135deg,#e3c36d,#b58a32);
+  color: #171717;
+  font-size: 17px;
+  font-weight: bold;
+  cursor: pointer;
+}
+ <style>
 *{box-sizing:border-box}
 body{margin:0;background:#111;color:#fff;font-family:Arial,sans-serif}
 header{text-align:center;padding:25px;background:#080808;border-bottom:2px solid #c9a34b}
@@ -165,7 +255,81 @@ function renderCart(){
   "الإجمالي: "+total.toLocaleString("ar-EG")+" جنيه";
 }
 
-async function checkout(){
+
+function checkout(){
+ if(!cart.length){
+  alert("السلة فارغة");
+  return;
+ }
+
+ document.getElementById("checkoutModal").style.display="flex";
+}
+
+function closeCheckout(){
+ document.getElementById("checkoutModal").style.display="none";
+}
+
+async function submitCheckout(event){
+ event.preventDefault();
+
+ if(!cart.length){
+  alert("السلة فارغة");
+  closeCheckout();
+  return;
+ }
+
+ const name=document.getElementById("customerName").value.trim();
+ const phone=document.getElementById("customerPhone").value.trim();
+ const address=document.getElementById("customerAddress").value.trim();
+
+ if(!name || !phone || !address){
+  alert("من فضلك أكمل جميع البيانات");
+  return;
+ }
+
+ const submitButton=document.querySelector(".checkout-submit");
+ submitButton.disabled=true;
+ submitButton.textContent="جاري تسجيل الطلب...";
+
+ const subtotal=cart.reduce((s,p)=>s+p.price*p.quantity,0);
+
+ const orderItems=cart.map(p=>({
+  product_id:p.id,
+  name:p.name,
+  price:p.price,
+  quantity:p.quantity
+ }));
+
+ const {error}=await db.from("orders").insert([{
+  customer_name:name,
+  customer_phone:phone,
+  customer_address:address,
+  items:orderItems,
+  subtotal:subtotal,
+  delivery_fee:0,
+  total:subtotal,
+  status:"pending"
+ }]);
+
+ if(error){
+  console.error(error);
+  alert("لم يتم تسجيل الطلب. حاول مرة أخرى.");
+  submitButton.disabled=false;
+  submitButton.textContent="تأكيد الطلب";
+  return;
+ }
+
+ const message=
+  "طلب جديد من ZAIN STORE%0A"+
+  "الاسم: "+encodeURIComponent(name)+"%0A"+
+  "الهاتف: "+encodeURIComponent(phone)+"%0A"+
+  "العنوان: "+encodeURIComponent(address)+"%0A"+
+  orderItems.map(p=>encodeURIComponent(p.name)+" × "+p.quantity+
+  " - "+p.price*p.quantity+" جنيه").join("%0A")+
+  "%0Aالإجمالي: "+subtotal+" جنيه";
+
+ window.location.href="https://wa.me/"+WHATSAPP+"?text="+message;
+}
  if(!cart.length){alert("السلة فارغة");return;}
 
  const name=prompt("اكتب اسمك:");
@@ -211,5 +375,27 @@ async function checkout(){
 
 loadStore();
 </script>
+
+<div id="checkoutModal" class="checkout-modal" style="display:none;">
+  <div class="checkout-box">
+    <button type="button" class="checkout-close" onclick="closeCheckout()">×</button>
+
+    <h2>إتمام الطلب</h2>
+    <p>من فضلك أدخل بيانات التوصيل</p>
+
+    <form id="checkoutForm" onsubmit="submitCheckout(event)">
+      <label for="customerName">الاسم بالكامل</label>
+      <input id="customerName" type="text" placeholder="اكتب اسمك بالكامل" required>
+
+      <label for="customerPhone">رقم الهاتف</label>
+      <input id="customerPhone" type="tel" placeholder="01xxxxxxxxx" required>
+
+      <label for="customerAddress">عنوان التوصيل</label>
+      <textarea id="customerAddress" placeholder="اكتب عنوانك بالتفصيل" required></textarea>
+
+      <button type="submit" class="checkout-submit">تأكيد الطلب</button>
+    </form>
+  </div>
+</div>
 </body>
 </html>
