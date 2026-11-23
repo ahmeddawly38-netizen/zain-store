@@ -503,7 +503,89 @@ function closeCheckout(){
 
 /* تسجيل الطلب وإرساله إلى واتساب */
 
+let orderSubmitting=false;
+
 async function submitCheckout(event){
+ event.preventDefault();
+
+ if(orderSubmitting)return;
+
+ if(!cart.length){
+  alert("السلة فارغة");
+  closeCheckout();
+  return;
+ }
+
+ const name=document.getElementById("customerName").value.trim();
+ const phone=document.getElementById("customerPhone").value.trim();
+ const address=document.getElementById("customerAddress").value.trim();
+
+ if(!name||!phone||!address){
+  alert("من فضلك أكمل جميع البيانات");
+  return;
+ }
+
+ const submitButton=document.querySelector(".checkout-submit");
+
+ orderSubmitting=true;
+ submitButton.disabled=true;
+ submitButton.textContent="جاري تسجيل الطلب...";
+
+ try{
+
+  const subtotal=cart.reduce(
+   (s,p)=>s+p.price*p.quantity,0
+  );
+
+  const orderItems=cart.map(p=>({
+   product_id:p.id,
+   name:p.name,
+   price:p.price,
+   quantity:p.quantity
+  }));
+
+  const {error}=await db.from("orders").insert([{
+   customer_name:name,
+   customer_phone:phone,
+   customer_address:address,
+   items:orderItems,
+   subtotal:subtotal,
+   delivery_fee:0,
+   total:subtotal,
+   status:"pending"
+  }]);
+
+  if(error)throw error;
+
+  submitButton.textContent="تم تسجيل الطلب بنجاح ✓";
+
+  const message=[
+   "طلب جديد من ZAIN STORE",
+   "الاسم: "+name,
+   "الهاتف: "+phone,
+   "العنوان: "+address,
+   ...orderItems.map(p=>
+    p.name+" × "+p.quantity+" - "+(p.price*p.quantity)+" جنيه"
+   ),
+   "الإجمالي: "+subtotal+" جنيه"
+  ].join("\n");
+
+  const whatsappURL=
+   "https://wa.me/"+WHATSAPP+"?text="+encodeURIComponent(message);
+
+  window.location.href=whatsappURL;
+
+ }catch(error){
+
+  console.error(error);
+
+  alert("حدث خطأ أثناء تسجيل الطلب. حاول مرة أخرى.");
+
+  orderSubmitting=false;
+  submitButton.disabled=false;
+  submitButton.textContent="تأكيد الطلب";
+ }
+}
 
  event.preventDefault();
 
