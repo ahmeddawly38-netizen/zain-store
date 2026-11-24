@@ -39,6 +39,19 @@ footer{text-align:center;padding:25px;color:#aaa}
 .checkout-box textarea{min-height:90px;resize:vertical}
 .checkout-submit{width:100%;margin-top:22px;padding:14px;border:none;border-radius:9px;background:linear-gradient(135deg,#e3c36d,#b58a32);color:#171717;font-size:17px;font-weight:bold;cursor:pointer}
 .checkout-submit:disabled{opacity:.6;cursor:not-allowed}
+.search-wrap,.track-wrap{margin:15px;padding:15px;background:#202020;border:1px solid #514326;border-radius:12px}
+.search-wrap input,.track-wrap input,.coupon-wrap input,.review-form input,.review-form textarea{width:100%;padding:12px;margin:6px 0 10px;border:1px solid #555;border-radius:8px;background:#292929;color:#fff;font-size:15px}
+.featured-title{margin-top:25px}
+.rating-line{color:#e5c36b;font-size:14px}
+.review-form{margin-top:10px;text-align:right}
+.review-form button,.track-wrap button,.coupon-wrap button{background:#c9a34b;color:#111;border:0;border-radius:7px;padding:9px 12px;font-weight:bold}
+.review-form details{margin-top:10px;text-align:right}
+.review-form summary{color:#d6b45b;cursor:pointer}
+.review-item{border-top:1px solid #444;padding:7px 0;font-size:13px;text-align:right}
+.coupon-wrap{border-top:1px solid #555;margin-top:15px;padding-top:12px}
+.coupon-wrap button{width:100%}
+#couponMessage,#trackResult{font-size:13px;color:#e5c36b;margin-top:8px;white-space:pre-wrap}
+.track-wrap h2{text-align:right}
 @media(max-width:480px){.checkout-box{padding:23px 16px}.product img{height:145px}}
 </style>
 </head>
@@ -81,10 +94,24 @@ footer{text-align:center;padding:25px;color:#aaa}
 </header>
 
 <nav id="categories"><button data-category="all">كل المنتجات</button></nav>
+<div class="search-wrap">
+ <input id="productSearch" type="search" placeholder="🔍 ابحث عن منتج بالاسم أو الوصف..." oninput="renderProducts()">
+</div>
+<section id="featuredSection">
+ <h2 class="featured-title">⭐ منتجات مميزة</h2>
+ <div class="products" id="featuredProducts"></div>
+</section>
 <h2>منتجاتنا</h2>
 <div id="message">جاري تحميل المنتجات...</div>
 <div class="products" id="products"></div>
 
+<section class="track-wrap">
+ <h2>📦 متابعة طلبك</h2>
+ <input id="trackOrderNumber" type="number" min="1" placeholder="رقم الطلب">
+ <input id="trackPhone" type="tel" placeholder="رقم الهاتف المستخدم في الطلب">
+ <button type="button" onclick="trackOrder()">اعرض حالة الطلب</button>
+ <div id="trackResult"></div>
+</section>
 
 <div id="cartOverlay" onclick="closeCart()"
  style="display:none;position:fixed;inset:0;background:#0009;z-index:9998;">
@@ -113,7 +140,12 @@ footer{text-align:center;padding:25px;color:#aaa}
  </div>
 
  <div id="cartItems">السلة فارغة</div>
-
+ <div class="coupon-wrap">
+  <label for="couponCode">🎟️ كود الخصم</label>
+  <input id="couponCode" type="text" placeholder="اكتب كود الخصم">
+  <button type="button" onclick="applyCoupon()">تطبيق الكوبون</button>
+  <div id="couponMessage"></div>
+ </div>
  <h3 id="total">الإجمالي: 0 جنيه</h3>
 
  <button class="checkout" onclick="checkout()">
@@ -149,8 +181,37 @@ const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 let products=[];
 let cart=[];
+let productReviews=[];
 let selectedCategory="all";
 let orderSubmitting=false;
+let cartCouponCode="";
+let cartDiscount=0;
+
+const STORE_API="https://keemqicaosqmpuwiyozx.supabase.co/functions/v1/store-api";
+
+async function storeApi(body){
+ const response=await fetch(STORE_API,{
+  method:"POST",
+  headers:{
+   "Content-Type":"application/json",
+   "apikey":SUPABASE_KEY
+  },
+  body:JSON.stringify(body)
+ });
+ let data={};
+ try{data=await response.json();}catch(_){}
+ if(!response.ok)throw new Error(data.error||"تعذر إتمام العملية");
+ return data;
+}
+
+function resetCoupon(message=""){
+ cartCouponCode="";
+ cartDiscount=0;
+ const input=document.getElementById("couponCode");
+ const note=document.getElementById("couponMessage");
+ if(input)input.value="";
+ if(note)note.textContent=message;
+}
 
 function safe(value){
  return String(value??"").replace(/[&<>"']/g,c=>({
@@ -162,15 +223,17 @@ async function loadStore(){
  const message=document.getElementById("message");
  message.textContent="جاري تحميل المنتجات...";
  try{
-  const [catResult,productResult]=await Promise.all([
+  const [catResult,productResult,reviewResult]=await Promise.all([
    db.from("categories").select("id,name").eq("is_active",true).order("sort_order"),
-   db.from("products").select("id,name,description,price,image_url,stock_quantity,category_id").eq("is_active",true).order("created_at",{ascending:false})
+   db.from("products").select("id,name,description,price,image_url,stock_quantity,category_id,is_featured").eq("is_active",true).order("created_at",{ascending:false}),
+   db.from("product_reviews").select("product_id,rating,display_name,comment,created_at").eq("status","approved").order("created_at",{ascending:false})
   ]);
 
   if(catResult.error) throw catResult.error;
   if(productResult.error) throw productResult.error;
 
   products=productResult.data||[];
+  productReviews=reviewResult.error?[]:(reviewResult.data||[]);
   const nav=document.getElementById("categories");
   nav.innerHTML='<button data-category="all">كل المنتجات</button>';
 
@@ -195,29 +258,116 @@ async function loadStore(){
  }
 }
 
-function renderProducts(){
- const list=selectedCategory==="all"?products:products.filter(p=>String(p.category_id)===String(selectedCategory));
- const box=document.getElementById("products");
- document.getElementById("message").textContent=list.length?"":"لا توجد منتجات في هذا القسم حاليًا";
-
- box.innerHTML=list.map(p=>`
+function productCardHtml(p){
+ const reviews=productReviews.filter(r=>String(r.product_id)===String(p.id));
+ const average=reviews.length?reviews.reduce((sum,r)=>sum+Number(r.rating||0),0)/reviews.length:0;
+ const reviewHtml=reviews.slice(0,3).map(r=>`
+  <div class="review-item">
+   <strong>${safe(r.display_name||"عميل")}</strong>
+   <span class="rating-line">${"★".repeat(Number(r.rating||0))}${"☆".repeat(5-Number(r.rating||0))}</span>
+   <div>${safe(r.comment||"")}</div>
+  </div>
+ `).join("");
+ return `
   <div class="product">
    <img src="${safe(p.image_url||"")}" alt="${safe(p.name)}" onerror="this.style.display='none'">
    <h3>${safe(p.name)}</h3>
    <p>${safe(p.description||"")}</p>
    <p class="price">${Number(p.price).toLocaleString("ar-EG")} جنيه</p>
+   <p class="rating-line">${reviews.length?("★".repeat(Math.round(average))+"☆".repeat(5-Math.round(average))+" "+average.toFixed(1)+" ("+reviews.length+" تقييم)"):"لا توجد تقييمات بعد"}</p>
    <button class="add" data-add="${safe(p.id)}" ${Number(p.stock_quantity)<=0?"disabled":""}>
     ${Number(p.stock_quantity)<=0?"غير متوفر":"أضف للسلة"}
    </button>
+   <div class="review-form">
+    <details>
+     <summary>⭐ آراء العملاء وإضافة تقييم</summary>
+     ${reviewHtml||'<p>لا توجد آراء منشورة لهذا المنتج بعد.</p>'}
+     <form onsubmit="submitReview(event,'${safe(p.id)}')">
+      <input name="order_number" type="number" min="1" placeholder="رقم طلب تم استلامه" required>
+      <input name="phone" type="tel" placeholder="رقم الهاتف المسجل في الطلب" required>
+      <input name="display_name" type="text" minlength="2" maxlength="60" placeholder="الاسم الذي سيظهر (اختياري)">
+      <select name="rating" required>
+       <option value="">اختر التقييم</option>
+       <option value="5">⭐⭐⭐⭐⭐ ممتاز</option>
+       <option value="4">⭐⭐⭐⭐ جيد جدًا</option>
+       <option value="3">⭐⭐⭐ جيد</option>
+       <option value="2">⭐⭐ مقبول</option>
+       <option value="1">⭐ ضعيف</option>
+      </select>
+      <textarea name="comment" maxlength="1000" placeholder="اكتب رأيك في المنتج (اختياري)"></textarea>
+      <button type="submit">إرسال التقييم</button>
+     </form>
+    </details>
+   </div>
   </div>
- `).join("");
+ `;
+}
 
- box.querySelectorAll("[data-add]").forEach(b=>{
+function renderProducts(){
+ const search=(document.getElementById("productSearch")?.value||"").trim().toLocaleLowerCase("ar");
+ let list=selectedCategory==="all"?products:products.filter(p=>String(p.category_id)===String(selectedCategory));
+ if(search)list=list.filter(p=>(p.name+" "+(p.description||"")).toLocaleLowerCase("ar").includes(search));
+
+ const box=document.getElementById("products");
+ document.getElementById("message").textContent=list.length?"":"لا توجد منتجات تطابق البحث أو القسم المحدد";
+ box.innerHTML=list.map(productCardHtml).join("");
+
+ const featured=products.filter(p=>p.is_featured && (!search || (p.name+" "+(p.description||"")).toLocaleLowerCase("ar").includes(search)));
+ document.getElementById("featuredSection").style.display=featured.length?"block":"none";
+ document.getElementById("featuredProducts").innerHTML=featured.map(productCardHtml).join("");
+
+ document.querySelectorAll("[data-add]").forEach(b=>{
   b.addEventListener("click",()=>addToCart(b.dataset.add));
  });
 }
 
+async function submitReview(event,productId){
+ event.preventDefault();
+ const form=event.currentTarget;
+ const fd=new FormData(form);
+ const button=form.querySelector("button[type=submit]");
+ button.disabled=true;
+ button.textContent="جاري إرسال التقييم...";
+ try{
+  await storeApi({
+   action:"submit_review",
+   order_number:Number(fd.get("order_number")),
+   customer_phone:String(fd.get("phone")||"").trim(),
+   product_id:productId,
+   rating:Number(fd.get("rating")),
+   display_name:String(fd.get("display_name")||"").trim(),
+   comment:String(fd.get("comment")||"").trim()
+  });
+  alert("تم إرسال تقييمك، وسيظهر بعد مراجعة الإدارة.");
+  form.reset();
+ }catch(error){
+  alert(error.message);
+ }finally{
+  button.disabled=false;
+  button.textContent="إرسال التقييم";
+ }
+}
+
+async function trackOrder(){
+ const number=Number(document.getElementById("trackOrderNumber").value);
+ const phone=document.getElementById("trackPhone").value.trim();
+ const result=document.getElementById("trackResult");
+ if(!Number.isSafeInteger(number)||number<1||!phone){
+  result.textContent="اكتب رقم الطلب ورقم الهاتف أولًا.";
+  return;
+ }
+ result.textContent="جاري البحث عن الطلب...";
+ try{
+  const data=await storeApi({action:"track_order",order_number:number,customer_phone:phone});
+  const names={pending:"قيد المراجعة",confirmed:"تم تأكيد الطلب",preparing:"جاري التجهيز",shipped:"خرج للتوصيل",delivered:"تم التسليم",cancelled:"تم إلغاء الطلب"};
+  result.textContent="رقم الطلب: ZS-"+String(data.order.order_number).padStart(4,"0")+"\nالحالة: "+(names[data.order.status]||data.order.status)+"\nتاريخ الطلب: "+new Date(data.order.created_at).toLocaleString("ar-EG");
+ }catch(error){
+  result.textContent=error.message;
+ }
+}
+
 function addToCart(id){
+ resetCoupon("تغيرت السلة؛ أعد تطبيق الكوبون إذا أردت استخدامه.");
  const p=products.find(x=>String(x.id)===String(id));
  if(!p)return;
  const line=cart.find(x=>String(x.id)===String(id));
@@ -241,7 +391,6 @@ function addToCart(id){
 function renderCart(){
  const box=document.getElementById("cartItems");
  const count=document.getElementById("cartCount");
-
  const totalCount=cart.reduce((s,p)=>s+p.quantity,0);
 
  if(count){
@@ -251,6 +400,7 @@ function renderCart(){
 
  if(!cart.length){
   box.textContent="السلة فارغة";
+  resetCoupon();
  }else{
   box.innerHTML=cart.map((p,i)=>`
    <div class="cart-line">
@@ -265,15 +415,41 @@ function renderCart(){
  box.querySelectorAll("[data-remove]").forEach(b=>{
   b.addEventListener("click",()=>{
    cart.splice(Number(b.dataset.remove),1);
+   resetCoupon("تم تحديث السلة؛ أعد تطبيق الكوبون.");
    renderCart();
   });
  });
 
- const total=cart.reduce((s,p)=>s+p.price*p.quantity,0);
- document.getElementById("total").textContent=
-  "الإجمالي: "+total.toLocaleString("ar-EG")+" جنيه";
+ const subtotal=cart.reduce((sum,p)=>sum+p.price*p.quantity,0);
+ const total=Math.max(0,subtotal-cartDiscount);
+ document.getElementById("total").innerHTML=
+  "المجموع: "+subtotal.toLocaleString("ar-EG")+" جنيه"+
+  (cartDiscount>0?'<br><span style="color:#8fd18f;font-size:15px">الخصم: -'+cartDiscount.toLocaleString("ar-EG")+' جنيه</span>':"")+
+  '<br>الإجمالي: '+total.toLocaleString("ar-EG")+" جنيه";
 }
 
+async function applyCoupon(){
+ const code=document.getElementById("couponCode").value.trim();
+ const note=document.getElementById("couponMessage");
+ const subtotal=cart.reduce((sum,p)=>sum+p.price*p.quantity,0);
+ if(!cart.length){note.textContent="أضف منتجات للسلة أولًا.";return;}
+ if(!code){note.textContent="اكتب كود الخصم.";return;}
+ note.textContent="جاري التحقق من الكوبون...";
+ try{
+  const data=await storeApi({action:"preview_coupon",code,subtotal});
+  if(!data.success){
+   resetCoupon(data.message||"الكوبون غير صالح.");
+   return;
+  }
+  cartCouponCode=code.toUpperCase();
+  cartDiscount=Number(data.discount_amount||0);
+  note.textContent=data.message+" — الخصم "+cartDiscount.toLocaleString("ar-EG")+" جنيه";
+  renderCart();
+  document.getElementById("couponMessage").textContent=data.message+" — الخصم "+cartDiscount.toLocaleString("ar-EG")+" جنيه";
+ }catch(error){
+  resetCoupon(error.message);
+ }
+}
 
 function openCart(){
  document.getElementById("cartOverlay").style.display="block";
@@ -321,36 +497,43 @@ async function submitCheckout(event){
  submitButton.textContent="جاري تسجيل الطلب...";
 
  try{
-  const subtotal=cart.reduce((s,p)=>s+p.price*p.quantity,0);
-  const orderItems=cart.map(p=>({product_id:p.id,name:p.name,price:p.price,quantity:p.quantity}));
-
-  const {error}=await db.from("orders").insert([{
+  const orderItems=cart.map(p=>({product_id:p.id,quantity:p.quantity}));
+  const data=await storeApi({
+   action:"create_order",
    customer_name:name,
    customer_phone:phone,
    customer_address:address,
    items:orderItems,
-   subtotal:subtotal,
-   delivery_fee:0,
-   total:subtotal,
-   status:"pending"
-  }]);
-  if(error)throw error;
+   coupon_code:cartCouponCode||null
+  });
+  const order=data.order||{};
+  const subtotal=Number(order.subtotal||0);
+  const discount=Number(order.discount_amount||0);
+  const total=Number(order.total||subtotal-discount);
+  const orderNo=order.order_number;
 
   submitButton.textContent="تم تسجيل الطلب بنجاح ✓";
   const message=[
    "طلب جديد من ZAIN STORE",
+   "رقم الطلب: "+(orderNo?"ZS-"+String(orderNo).padStart(4,"0"):"سيظهر في رسالة التأكيد"),
    "الاسم: "+name,
    "الهاتف: "+phone,
    "العنوان: "+address,
-   ...orderItems.map(p=>p.name+" × "+p.quantity+" - "+(p.price*p.quantity)+" جنيه"),
-   "الإجمالي: "+subtotal+" جنيه"
+   ...cart.map(p=>p.name+" × "+p.quantity),
+   "المجموع: "+subtotal+" جنيه",
+   ...(discount>0?["الخصم: "+discount+" جنيه"]:[]),
+   "الإجمالي: "+total+" جنيه"
   ].join("\n");
 
   const whatsappURL="https://wa.me/"+WHATSAPP+"?text="+encodeURIComponent(message);
+  cart=[];
+  resetCoupon();
+  renderCart();
+  document.getElementById("checkoutForm").reset();
   window.location.href=whatsappURL;
  }catch(error){
   console.error("submitCheckout error:",error);
-  alert("حدث خطأ أثناء تسجيل الطلب. حاول مرة أخرى.");
+  alert(error.message||"حدث خطأ أثناء تسجيل الطلب. حاول مرة أخرى.");
   orderSubmitting=false;
   submitButton.disabled=false;
   submitButton.textContent="تأكيد الطلب";
