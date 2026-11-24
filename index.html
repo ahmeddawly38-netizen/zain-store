@@ -274,11 +274,23 @@ function renderCart(){
   "الإجمالي: "+total.toLocaleString("ar-EG")+" جنيه";
 }
 
+
+function openCart(){
+ document.getElementById("cartOverlay").style.display="block";
+ document.getElementById("cartDrawer").style.transform="translateX(0)";
+}
+
+function closeCart(){
+ document.getElementById("cartOverlay").style.display="none";
+ document.getElementById("cartDrawer").style.transform="translateX(-100%)";
+}
+
 function checkout(){
  if(!cart.length){
   alert("السلة فارغة");
   return;
  }
+ closeCart();
  document.getElementById("checkoutModal").style.display="flex";
 }
 
