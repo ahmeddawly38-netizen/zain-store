@@ -44,6 +44,8 @@ img{max-width:75px;max-height:75px;object-fit:cover;border-radius:8px}
 <h2>لوحة التحكم</h2>
 <button onclick="showProducts()">المنتجات</button>
 <button onclick="showOrders()">الطلبات <span id="newOrdersCount" style="background:red;color:white;border-radius:50%;padding:2px 7px;font-size:12px;display:none">0</span></button>
+<button onclick="showCoupons()">الكوبونات</button>
+<button onclick="showReviews()">التقييمات</button>
 <button class="gray" onclick="logout()">تسجيل الخروج</button>
 </div>
 
@@ -71,6 +73,10 @@ img{max-width:75px;max-height:75px;object-fit:cover;border-radius:8px}
 
 <label>الكمية المتاحة</label>
 <input id="stock" type="number" min="0" value="0">
+<label style="display:flex;align-items:center;gap:8px">
+ <input id="isFeatured" type="checkbox" style="width:auto;margin:0">
+ ⭐ عرض المنتج ضمن المنتجات المميزة
+</label>
 
 <button onclick="saveProduct()">حفظ المنتج</button>
 <button class="gray" onclick="clearForm()">إلغاء التعديل</button>
@@ -82,6 +88,40 @@ img{max-width:75px;max-height:75px;object-fit:cover;border-radius:8px}
 <div id="ordersSection" class="card hidden">
 <h2>طلبات العملاء</h2>
 <div id="ordersList">جاري تحميل الطلبات...</div>
+</div>
+
+<div id="couponsSection" class="card hidden">
+<h2>إدارة كوبونات الخصم</h2>
+<input type="hidden" id="couponId">
+<label>كود الخصم</label>
+<input id="couponCode" placeholder="مثال: ZAIN10" maxlength="30">
+<label>نوع الخصم</label>
+<select id="couponType">
+ <option value="percent">نسبة مئوية %</option>
+ <option value="fixed">مبلغ ثابت بالجنيه</option>
+</select>
+<label>قيمة الخصم</label>
+<input id="couponValue" type="number" min="0.01" step="0.01" placeholder="مثال: 10">
+<label>الحد الأدنى للطلب (اختياري)</label>
+<input id="couponMin" type="number" min="0" step="0.01" value="0">
+<label>أقصى خصم (اختياري)</label>
+<input id="couponMax" type="number" min="0" step="0.01" placeholder="اتركه فارغًا بدون حد">
+<label>تاريخ بداية الكوبون (اختياري)</label>
+<input id="couponStarts" type="datetime-local">
+<label>تاريخ انتهاء الكوبون (اختياري)</label>
+<input id="couponExpires" type="datetime-local">
+<label>الحد الأقصى لعدد الاستخدامات (اختياري)</label>
+<input id="couponLimit" type="number" min="1" placeholder="اتركه فارغًا بدون حد">
+<button onclick="saveCoupon()">حفظ الكوبون</button>
+<button class="gray" onclick="clearCouponForm()">إلغاء التعديل</button>
+<h2>الكوبونات الموجودة</h2>
+<div id="couponsList">اضغط على الكوبونات لعرضها.</div>
+</div>
+
+<div id="reviewsSection" class="card hidden">
+<h2>مراجعة تقييمات العملاء</h2>
+<p>التقييم لا يظهر في المتجر إلا بعد موافقة الإدارة.</p>
+<div id="reviewsList">جاري تحميل التقييمات...</div>
 </div>
 </div>
 
@@ -131,8 +171,24 @@ async function logout(){
 }
 
 function showProducts(){
+ hideAdminSections();
  document.getElementById("productsSection").classList.remove("hidden");
- document.getElementById("ordersSection").classList.add("hidden");
+}
+
+function hideAdminSections(){
+ ["productsSection","ordersSection","couponsSection","reviewsSection"].forEach(id=>{
+  document.getElementById(id).classList.add("hidden");
+ });
+}
+function showCoupons(){
+ hideAdminSections();
+ document.getElementById("couponsSection").classList.remove("hidden");
+ loadCoupons();
+}
+function showReviews(){
+ hideAdminSections();
+ document.getElementById("reviewsSection").classList.remove("hidden");
+ loadReviews();
 }
 
 let ordersRealtimeChannel = null;
@@ -157,7 +213,7 @@ function startOrdersRealtime(){
 }
 
 function showOrders(){
- document.getElementById("productsSection").classList.add("hidden");
+ hideAdminSections();
  document.getElementById("ordersSection").classList.remove("hidden");
  startOrdersRealtime();
  loadOrders();
@@ -198,7 +254,7 @@ async function loadProducts(){
   title.textContent=p.name+" - "+p.price+" جنيه";
 
   const info=document.createElement("p");
-  info.textContent=(p.categories?.name||"بدون قسم")+" | الكمية: "+p.stock_quantity+" | "+(p.is_active?"ظاهر":"مخفي");
+  info.textContent=(p.categories?.name||"بدون قسم")+" | الكمية: "+p.stock_quantity+" | "+(p.is_active?"ظاهر":"مخفي")+(p.is_featured?" | ⭐ منتج مميز":"");
 
   div.append(title,info);
 
@@ -233,6 +289,7 @@ function clearForm(){
   document.getElementById(id).value="";
  });
  document.getElementById("stock").value=0;
+ document.getElementById("isFeatured").checked=false;
 }
 
 function editProduct(p){
@@ -243,6 +300,7 @@ function editProduct(p){
  document.getElementById("oldPrice").value=p.compare_at_price||"";
  document.getElementById("image").value=p.image_url||"";
  document.getElementById("stock").value=p.stock_quantity||0;
+ document.getElementById("isFeatured").checked=Boolean(p.is_featured);
  document.getElementById("category").value=p.category_id||"";
  window.scrollTo(0,0);
 }
@@ -267,7 +325,8 @@ async function saveProduct(){
   price,
   compare_at_price:old===""?null:Number(old),
   image_url:document.getElementById("image").value.trim()||null,
-  stock_quantity
+  stock_quantity,
+  is_featured:document.getElementById("isFeatured").checked
  };
 
  let result;
@@ -300,6 +359,160 @@ async function deleteProduct(id){
  loadProducts();
 }
 
+
+function toLocalDateTimeValue(value){
+ if(!value)return "";
+ const d=new Date(value);
+ if(Number.isNaN(d.getTime()))return "";
+ const local=new Date(d.getTime()-d.getTimezoneOffset()*60000);
+ return local.toISOString().slice(0,16);
+}
+
+function clearCouponForm(){
+ ["couponId","couponCode","couponValue","couponMax","couponStarts","couponExpires","couponLimit"].forEach(id=>{
+  document.getElementById(id).value="";
+ });
+ document.getElementById("couponType").value="percent";
+ document.getElementById("couponMin").value="0";
+}
+
+async function loadCoupons(){
+ const box=document.getElementById("couponsList");
+ box.textContent="جاري تحميل الكوبونات...";
+ const {data,error}=await db.from("store_coupons").select("*").order("created_at",{ascending:false});
+ if(error){box.textContent="تعذر تحميل الكوبونات: "+error.message;return;}
+ if(!data?.length){box.textContent="لا توجد كوبونات حتى الآن";return;}
+ box.innerHTML="";
+ data.forEach(c=>{
+  const card=document.createElement("div");
+  card.className="product";
+  const title=document.createElement("strong");
+  title.textContent=c.code+" — "+(c.discount_type==="percent"?c.discount_value+"%":c.discount_value+" جنيه");
+  const info=document.createElement("p");
+  info.textContent="الاستخدامات: "+c.usage_count+(c.usage_limit?"/"+c.usage_limit:"/غير محدود")+" | الحد الأدنى: "+Number(c.min_order_amount||0)+" جنيه | "+(c.is_active?"مفعل":"متوقف");
+  const edit=document.createElement("button");
+  edit.textContent="تعديل";
+  edit.onclick=()=>editCoupon(c);
+  const toggle=document.createElement("button");
+  toggle.className="gray";
+  toggle.textContent=c.is_active?"إيقاف":"تفعيل";
+  toggle.onclick=async()=>{
+   const {error}=await db.from("store_coupons").update({is_active:!c.is_active}).eq("id",c.id);
+   if(error){alert("تعذر تغيير الحالة: "+error.message);return;}
+   loadCoupons();
+  };
+  const del=document.createElement("button");
+  del.className="red";
+  del.textContent="حذف";
+  del.onclick=async()=>{
+   if(!confirm("هل تريد حذف الكوبون "+c.code+"؟"))return;
+   const {error}=await db.from("store_coupons").delete().eq("id",c.id);
+   if(error){alert("تعذر حذف الكوبون: "+error.message);return;}
+   loadCoupons();
+  };
+  card.append(title,info,edit,toggle,del);
+  box.appendChild(card);
+ });
+}
+
+function editCoupon(c){
+ document.getElementById("couponId").value=c.id;
+ document.getElementById("couponCode").value=c.code||"";
+ document.getElementById("couponType").value=c.discount_type;
+ document.getElementById("couponValue").value=c.discount_value;
+ document.getElementById("couponMin").value=c.min_order_amount||0;
+ document.getElementById("couponMax").value=c.max_discount_amount??"";
+ document.getElementById("couponStarts").value=toLocalDateTimeValue(c.starts_at);
+ document.getElementById("couponExpires").value=toLocalDateTimeValue(c.expires_at);
+ document.getElementById("couponLimit").value=c.usage_limit??"";
+ window.scrollTo(0,0);
+}
+
+async function saveCoupon(){
+ const id=document.getElementById("couponId").value;
+ const code=document.getElementById("couponCode").value.trim().toUpperCase();
+ const type=document.getElementById("couponType").value;
+ const value=Number(document.getElementById("couponValue").value);
+ const min=Number(document.getElementById("couponMin").value||0);
+ const maxValue=document.getElementById("couponMax").value;
+ const limitValue=document.getElementById("couponLimit").value;
+ const starts=document.getElementById("couponStarts").value;
+ const expires=document.getElementById("couponExpires").value;
+ if(!/^[A-Z0-9_-]{3,30}$/.test(code)||!Number.isFinite(value)||value<=0||!Number.isFinite(min)||min<0||(type==="percent"&&value>100)){
+  alert("راجع كود الخصم وقيمة الخصم والحد الأدنى.");
+  return;
+ }
+ const payload={
+  code,discount_type:type,discount_value:value,min_order_amount:min,
+  max_discount_amount:maxValue===""?null:Number(maxValue),
+  usage_limit:limitValue===""?null:Number(limitValue),
+  starts_at:starts?new Date(starts).toISOString():null,
+  expires_at:expires?new Date(expires).toISOString():null
+ };
+ if(payload.max_discount_amount!==null&&(!Number.isFinite(payload.max_discount_amount)||payload.max_discount_amount<=0)){
+  alert("أقصى خصم يجب أن يكون رقمًا أكبر من صفر.");return;
+ }
+ if(payload.usage_limit!==null&&(!Number.isInteger(payload.usage_limit)||payload.usage_limit<1)){
+  alert("الحد الأقصى للاستخدام يجب أن يكون عددًا صحيحًا أكبر من صفر.");return;
+ }
+ if(payload.starts_at&&payload.expires_at&&new Date(payload.expires_at)<=new Date(payload.starts_at)){
+  alert("تاريخ الانتهاء يجب أن يكون بعد تاريخ البداية.");return;
+ }
+ const result=id
+  ?await db.from("store_coupons").update(payload).eq("id",id)
+  :await db.from("store_coupons").insert(payload);
+ if(result.error){alert("تعذر حفظ الكوبون: "+result.error.message);return;}
+ alert("تم حفظ الكوبون بنجاح.");
+ clearCouponForm();
+ loadCoupons();
+}
+
+async function loadReviews(){
+ const box=document.getElementById("reviewsList");
+ box.textContent="جاري تحميل التقييمات...";
+ const {data,error}=await db.from("product_reviews").select("*,products(name)").order("created_at",{ascending:false});
+ if(error){box.textContent="تعذر تحميل التقييمات: "+error.message;return;}
+ if(!data?.length){box.textContent="لا توجد تقييمات حتى الآن";return;}
+ box.innerHTML="";
+ data.forEach(r=>{
+  const card=document.createElement("div");
+  card.className="product";
+  const title=document.createElement("strong");
+  title.textContent=(r.products?.name||"منتج")+" — "+r.display_name;
+  const stars=document.createElement("p");
+  stars.style.color="#d6ad55";
+  stars.textContent="★".repeat(r.rating)+"☆".repeat(5-r.rating);
+  const comment=document.createElement("p");
+  comment.textContent=r.comment||"بدون تعليق";
+  const status=document.createElement("p");
+  status.textContent="الحالة: "+({pending:"بانتظار المراجعة",approved:"تمت الموافقة",rejected:"مرفوض"}[r.status]||r.status);
+  const approve=document.createElement("button");
+  approve.textContent="موافقة";
+  approve.onclick=()=>setReviewStatus(r.id,"approved");
+  const reject=document.createElement("button");
+  reject.className="gray";
+  reject.textContent="رفض";
+  reject.onclick=()=>setReviewStatus(r.id,"rejected");
+  const del=document.createElement("button");
+  del.className="red";
+  del.textContent="حذف";
+  del.onclick=async()=>{
+   if(!confirm("هل تريد حذف هذا التقييم؟"))return;
+   const {error}=await db.from("product_reviews").delete().eq("id",r.id);
+   if(error){alert("تعذر حذف التقييم: "+error.message);return;}
+   loadReviews();
+  };
+  card.append(title,stars,comment,status,approve,reject,del);
+  box.appendChild(card);
+ });
+}
+
+async function setReviewStatus(id,status){
+ const {error}=await db.from("product_reviews").update({status}).eq("id",id);
+ if(error){alert("تعذر تحديث التقييم: "+error.message);return;}
+ loadReviews();
+}
+
 function escapeInvoiceText(value){
  return String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;", "'":"&#39;"}[ch]));
 }
@@ -323,7 +536,7 @@ function printInvoice(o){
  invoiceWindow.document.open();
  invoiceWindow.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>فاتورة ${escapeInvoiceText(orderNo)} - ZAIN STORE</title><style>
  *{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#222;margin:0;padding:28px;background:#f4f4f4}.invoice{max-width:780px;margin:auto;background:#fff;padding:32px;border:1px solid #ddd}.top{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;border-bottom:3px solid #c49a43;padding-bottom:18px}.brand{font-size:27px;font-weight:bold;color:#9a742d}.muted{color:#666;font-size:13px;line-height:1.8}.title{font-size:24px;margin:22px 0;color:#222}.details{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px;margin-bottom:20px}.details div{padding:7px 0;border-bottom:1px solid #eee}table{width:100%;border-collapse:collapse;margin:18px 0}th,td{padding:12px 9px;border:1px solid #ddd;text-align:right;font-size:14px}th{background:#f4ead5}.totals{width: min(100%,360px);margin-right:auto}.totals div{display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #eee}.grand{font-size:20px;font-weight:bold;color:#8b6825}.footer{text-align:center;margin-top:35px;padding-top:15px;border-top:1px solid #ddd;color:#777;font-size:13px}.actions{text-align:center;margin:20px auto}.actions button{background:#c49a43;border:0;padding:12px 22px;border-radius:6px;font-weight:bold;cursor:pointer}.notes{margin-top:18px;white-space:pre-wrap}@media print{body{background:#fff;padding:0}.invoice{border:0;padding:10px;max-width:none}.actions{display:none}@page{size:A4;margin:12mm}}@media(max-width:560px){body{padding:8px}.invoice{padding:16px}.top{display:block}.details{grid-template-columns:1fr}th,td{font-size:12px;padding:8px 5px}}
- </style></head><body><main class="invoice"><div class="top"><div><div class="brand">ZAIN STORE</div><div class="muted">فاتورة طلب إلكترونية</div></div><div><strong>رقم الفاتورة: ${escapeInvoiceText(orderNo)}</strong><div class="muted">تاريخ الطلب: ${escapeInvoiceText(date)}</div></div></div><h1 class="title">فاتورة العميل</h1><section class="details"><div><strong>اسم العميل:</strong> ${escapeInvoiceText(o.customer_name||"غير متاح")}</div><div><strong>رقم الهاتف:</strong> ${escapeInvoiceText(o.customer_phone||"غير متاح")}</div><div><strong>عنوان التوصيل:</strong> ${escapeInvoiceText(o.customer_address||"غير متاح")}</div><div><strong>حالة الطلب:</strong> ${escapeInvoiceText(statusNames[o.status]||o.status||"غير محدد")}</div></section><h3>تفاصيل المنتجات</h3><table><thead><tr><th>المنتج</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead><tbody>${rows||'<tr><td colspan="4">لا توجد تفاصيل منتجات</td></tr>'}</tbody></table><section class="totals"><div><span>المجموع الفرعي</span><strong>${Number(o.subtotal||0).toLocaleString("ar-EG")} ج.م</strong></div><div><span>رسوم التوصيل</span><strong>${Number(o.delivery_fee||0).toLocaleString("ar-EG")} ج.م</strong></div><div class="grand"><span>الإجمالي النهائي</span><strong>${Number(o.total||0).toLocaleString("ar-EG")} ج.م</strong></div></section>${o.notes?`<div class="notes"><strong>ملاحظات العميل:</strong> ${escapeInvoiceText(o.notes)}</div>`:""}<div class="footer">شكرًا لثقتكم في ZAIN STORE</div></main><div class="actions"><button onclick="window.print()">طباعة الفاتورة / حفظ PDF</button></div></body></html>`);
+ </style></head><body><main class="invoice"><div class="top"><div><div class="brand">ZAIN STORE</div><div class="muted">فاتورة طلب إلكترونية</div></div><div><strong>رقم الفاتورة: ${escapeInvoiceText(orderNo)}</strong><div class="muted">تاريخ الطلب: ${escapeInvoiceText(date)}</div></div></div><h1 class="title">فاتورة العميل</h1><section class="details"><div><strong>اسم العميل:</strong> ${escapeInvoiceText(o.customer_name||"غير متاح")}</div><div><strong>رقم الهاتف:</strong> ${escapeInvoiceText(o.customer_phone||"غير متاح")}</div><div><strong>عنوان التوصيل:</strong> ${escapeInvoiceText(o.customer_address||"غير متاح")}</div><div><strong>حالة الطلب:</strong> ${escapeInvoiceText(statusNames[o.status]||o.status||"غير محدد")}</div></section><h3>تفاصيل المنتجات</h3><table><thead><tr><th>المنتج</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead><tbody>${rows||'<tr><td colspan="4">لا توجد تفاصيل منتجات</td></tr>'}</tbody></table><section class="totals"><div><span>المجموع الفرعي</span><strong>${Number(o.subtotal||0).toLocaleString("ar-EG")} ج.م</strong></div><div><span>رسوم التوصيل</span><strong>${Number(o.delivery_fee||0).toLocaleString("ar-EG")} ج.م</strong></div>${Number(o.discount_amount||0)>0?`<div><span>الخصم${o.coupon_code?" ("+escapeInvoiceText(o.coupon_code)+")":""}</span><strong>- ${Number(o.discount_amount).toLocaleString("ar-EG")} ج.م</strong></div>`:""}<div class="grand"><span>الإجمالي النهائي</span><strong>${Number(o.total||0).toLocaleString("ar-EG")} ج.م</strong></div></section>${o.notes?`<div class="notes"><strong>ملاحظات العميل:</strong> ${escapeInvoiceText(o.notes)}</div>`:""}<div class="footer">شكرًا لثقتكم في ZAIN STORE</div></main><div class="actions"><button onclick="window.print()">طباعة الفاتورة / حفظ PDF</button></div></body></html>`);
  invoiceWindow.document.close();
 }
 
@@ -416,10 +629,17 @@ async function loadOrders(){
   subtotal.textContent="المجموع الفرعي: "+Number(o.subtotal||0).toLocaleString("ar-EG")+" جنيه";
   const delivery=document.createElement("p");
   delivery.textContent="رسوم التوصيل: "+Number(o.delivery_fee||0).toLocaleString("ar-EG")+" جنيه";
+  totals.append(subtotal,delivery);
+  if(Number(o.discount_amount||0)>0){
+   const discount=document.createElement("p");
+   discount.textContent="الخصم"+(o.coupon_code?" ("+o.coupon_code+")":"")+": -"+Number(o.discount_amount).toLocaleString("ar-EG")+" جنيه";
+   discount.style.color="#8fd18f";
+   totals.appendChild(discount);
+  }
   const total=document.createElement("h3");
   total.style.color="#d6ad55";
   total.textContent="الإجمالي: "+Number(o.total||0).toLocaleString("ar-EG")+" جنيه";
-  totals.append(subtotal,delivery,total);
+  totals.appendChild(total);
   card.appendChild(totals);
 
   const invoiceButton=document.createElement("button");
