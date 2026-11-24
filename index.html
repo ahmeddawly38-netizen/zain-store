@@ -44,8 +44,39 @@ footer{text-align:center;padding:25px;color:#aaa}
 </head>
 
 <body>
-<header>
- <img src="zain-logo.png" alt="ZAIN STORE" style="width:180px;max-width:80%;height:auto;">
+
+<header style="position:relative;">
+ <button onclick="openCart()" style="
+  position:absolute;
+  left:15px;
+  top:20px;
+  background:#d4af37;
+  color:#000;
+  border:0;
+  border-radius:50%;
+  width:48px;
+  height:48px;
+  font-size:23px;
+  cursor:pointer;">
+  🛒
+  <span id="cartCount" style="
+   position:absolute;
+   top:-6px;
+   right:-6px;
+   background:#e53935;
+   color:white;
+   border-radius:50%;
+   min-width:19px;
+   height:19px;
+   font-size:12px;
+   display:none;
+   align-items:center;
+   justify-content:center;">0</span>
+ </button>
+
+ <img src="zain-logo.png" alt="ZAIN STORE"
+  style="width:180px;max-width:80%;height:auto;">
+
  <p>أناقتك تبدأ من هنا ✨</p>
 </header>
 
