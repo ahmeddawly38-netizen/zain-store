@@ -85,11 +85,40 @@ footer{text-align:center;padding:25px;color:#aaa}
 <div id="message">جاري تحميل المنتجات...</div>
 <div class="products" id="products"></div>
 
-<div class="cart">
- <h2>🛒 سلة المشتريات</h2>
+
+<div id="cartOverlay" onclick="closeCart()"
+ style="display:none;position:fixed;inset:0;background:#0009;z-index:9998;">
+</div>
+
+<div id="cartDrawer" style="
+ position:fixed;
+ top:0;
+ left:0;
+ width:340px;
+ max-width:90%;
+ height:100%;
+ background:#171717;
+ color:#fff;
+ z-index:9999;
+ padding:20px;
+ box-sizing:border-box;
+ transform:translateX(-100%);
+ transition:transform .3s ease;
+ overflow-y:auto;
+ box-shadow:5px 0 20px #0008;">
+
+ <div style="display:flex;justify-content:space-between;align-items:center;">
+  <h2>🛒 سلة المشتريات</h2>
+  <button onclick="closeCart()" style="background:none;color:#d4af37;border:0;font-size:28px;">×</button>
+ </div>
+
  <div id="cartItems">السلة فارغة</div>
+
  <h3 id="total">الإجمالي: 0 جنيه</h3>
- <button class="checkout" onclick="checkout()">إتمام الطلب عبر واتساب</button>
+
+ <button class="checkout" onclick="checkout()">
+  إتمام الطلب
+ </button>
 </div>
 
 <footer>© ZAIN STORE - جميع الحقوق محفوظة</footer>
