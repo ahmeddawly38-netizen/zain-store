@@ -177,8 +177,18 @@ function addToCart(id){
  renderCart();
 }
 
+
 function renderCart(){
  const box=document.getElementById("cartItems");
+ const count=document.getElementById("cartCount");
+
+ const totalCount=cart.reduce((s,p)=>s+p.quantity,0);
+
+ if(count){
+  count.textContent=totalCount;
+  count.style.display=totalCount>0?"flex":"none";
+ }
+
  if(!cart.length){
   box.textContent="السلة فارغة";
  }else{
@@ -191,14 +201,17 @@ function renderCart(){
    </div>
   `).join("");
  }
+
  box.querySelectorAll("[data-remove]").forEach(b=>{
   b.addEventListener("click",()=>{
    cart.splice(Number(b.dataset.remove),1);
    renderCart();
   });
  });
+
  const total=cart.reduce((s,p)=>s+p.price*p.quantity,0);
- document.getElementById("total").textContent="الإجمالي: "+total.toLocaleString("ar-EG")+" جنيه";
+ document.getElementById("total").textContent=
+  "الإجمالي: "+total.toLocaleString("ar-EG")+" جنيه";
 }
 
 function checkout(){
